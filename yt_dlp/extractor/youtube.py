@@ -7365,7 +7365,6 @@ class YoutubeStudioIE(YoutubeBaseInfoExtractor):
             subtitles['en'] = [
                 {
                   'data': captions,
-                  'automatic_captions': captions,
                   'ext': 'vtt'
                 }
             ]
