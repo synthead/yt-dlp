@@ -5370,7 +5370,7 @@ class YoutubeTabIE(YoutubeTabBaseInfoExtractor):
     IE_DESC = 'YouTube Tabs'
     _VALID_URL = r'''(?x:
         https?://
-            (?!consent\.)(?:\w+\.)?
+            (?!(consent|studio)\.)(?:\w+\.)?
             (?:
                 youtube(?:kids)?\.com|
                 %(invidious)s
