@@ -7357,17 +7357,18 @@ class YoutubeStudioIE(YoutubeBaseInfoExtractor):
             fatal=True
         )
 
-        captions = base64.urlsafe_b64decode(response["content"]).decode("utf-8")
+        subtitles = {}
 
-        subtitles = {
-            'en': [
+        if response['content']:
+            captions = base64.urlsafe_b64decode(response['content']).decode('utf-8')
+
+            subtitles['en'] = [
                 {
                   'data': captions,
                   'automatic_captions': captions,
                   'ext': 'vtt'
                 }
             ]
-        }
 
         formats = [{ 'url': url }]
 
