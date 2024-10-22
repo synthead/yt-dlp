@@ -103,7 +103,6 @@ def current_git_head():
 
 _FILE_SUFFIXES = {
     'zip': '',
-    'py2exe': '_min.exe',
     'win_exe': '.exe',
     'win_x86_exe': '_x86.exe',
     'darwin_exe': '_macos',
@@ -117,6 +116,7 @@ _NON_UPDATEABLE_REASONS = {
     **{variant: None for variant in _FILE_SUFFIXES},  # Updatable
     **{variant: f'Auto-update is not supported for unpackaged {name} executable; Re-download the latest release'
        for variant, name in {'win32_dir': 'Windows', 'darwin_dir': 'MacOS', 'linux_dir': 'Linux'}.items()},
+    'py2exe': 'py2exe is no longer supported by yt-dlp; This executable cannot be updated',
     'source': 'You cannot update when running from source code; Use git to pull the latest changes',
     'unknown': 'You installed yt-dlp from a manual build or with a package manager; Use that to update',
     'other': 'You are using an unofficial build of yt-dlp; Build the executable again',
@@ -135,20 +135,37 @@ def _get_binary_name():
 
 
 def _get_system_deprecation():
-    MIN_SUPPORTED, MIN_RECOMMENDED = (3, 8), (3, 8)
+    MIN_SUPPORTED, MIN_RECOMMENDED = (3, 8), (3, 9)
 
     if sys.version_info > MIN_RECOMMENDED:
         return None
 
     major, minor = sys.version_info[:2]
-    if sys.version_info < MIN_SUPPORTED:
-        msg = f'Python version {major}.{minor} is no longer supported'
-    else:
-        msg = (f'Support for Python version {major}.{minor} has been deprecated. '
-               '\nYou may stop receiving updates on this version at any time')
+    PYTHON_MSG = f'Please update to Python {".".join(map(str, MIN_RECOMMENDED))} or above'
 
-    major, minor = MIN_RECOMMENDED
-    return f'{msg}! Please update to Python {major}.{minor} or above'
+    if sys.version_info < MIN_SUPPORTED:
+        return f'Python version {major}.{minor} is no longer supported! {PYTHON_MSG}'
+
+    EXE_MSG_TMPL = ('Support for {} has been deprecated. '
+                    'See  https://github.com/yt-dlp/yt-dlp/{}  for details.\n{}')
+    STOP_MSG = 'You may stop receiving updates on this version at any time!'
+    variant = detect_variant()
+
+    # Temporary until Windows builds use 3.9, which will drop support for Win7 and 2008ServerR2
+    if variant in ('win_exe', 'win_x86_exe'):
+        platform_name = platform.platform()
+        if any(platform_name.startswith(f'Windows-{name}') for name in ('7', '2008ServerR2')):
+            return EXE_MSG_TMPL.format('Windows 7/Server 2008 R2', 'issues/10086', STOP_MSG)
+        return None
+
+    # Temporary until aarch64/armv7l build flow is bumped to Ubuntu 20.04 and Python 3.9
+    elif variant in ('linux_aarch64_exe', 'linux_armv7l_exe'):
+        libc_ver = version_tuple(os.confstr('CS_GNU_LIBC_VERSION').partition(' ')[2])
+        if libc_ver < (2, 31):
+            return EXE_MSG_TMPL.format('system glibc version < 2.31', 'pull/8638', STOP_MSG)
+        return None
+
+    return f'Support for Python version {major}.{minor} has been deprecated. {PYTHON_MSG}'
 
 
 def _sha256_file(path):
@@ -503,7 +520,7 @@ class Updater:
                 return os.rename(old_filename, self.filename)
 
         variant = detect_variant()
-        if variant.startswith('win') or variant == 'py2exe':
+        if variant.startswith('win'):
             atexit.register(Popen, f'ping 127.0.0.1 -n 5 -w 1000 & del /F "{old_filename}"',
                             shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         elif old_filename:
