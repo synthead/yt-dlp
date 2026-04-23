@@ -16,7 +16,7 @@ from ._redirect import (
     YoutubeYtBeIE,
     YoutubeYtUserIE,
 )
-from ._search import YoutubeMusicSearchURLIE, YoutubeSearchDateIE, YoutubeSearchIE, YoutubeSearchURLIE
+from ._search import YoutubeMusicSearchURLIE, YoutubeSearchIE, YoutubeSearchURLIE
 from ._studio import YoutubeStudioIE
 from ._tab import YoutubePlaylistIE, YoutubeTabBaseInfoExtractor, YoutubeTabIE
 from ._video import YoutubeIE
@@ -40,7 +40,6 @@ for _cls in [
     YoutubeYtBeIE,
     YoutubeYtUserIE,
     YoutubeMusicSearchURLIE,
-    YoutubeSearchDateIE,
     YoutubeSearchIE,
     YoutubeSearchURLIE,
     YoutubePlaylistIE,

@@ -104,7 +104,6 @@ INNERTUBE_CLIENTS = {
         },
         'INNERTUBE_CONTEXT_CLIENT_NAME': 1,
         'SUPPORTS_COOKIES': True,
-        'SUPPORTS_AD_PLAYBACK_CONTEXT': True,
         **WEB_PO_TOKEN_POLICIES,
     },
     # Safari UA returns pre-merged video+audio 144p/240p/360p/720p/1080p HLS formats
@@ -118,7 +117,6 @@ INNERTUBE_CLIENTS = {
         },
         'INNERTUBE_CONTEXT_CLIENT_NAME': 1,
         'SUPPORTS_COOKIES': True,
-        'SUPPORTS_AD_PLAYBACK_CONTEXT': True,
         **WEB_PO_TOKEN_POLICIES,
     },
     'web_embedded': {
@@ -223,30 +221,17 @@ INNERTUBE_CLIENTS = {
         },
         'PLAYER_PO_TOKEN_POLICY': PlayerPoTokenPolicy(required=False, recommended=True),
     },
-    # Doesn't require a PoToken for some reason
-    'android_sdkless': {
-        'INNERTUBE_CONTEXT': {
-            'client': {
-                'clientName': 'ANDROID',
-                'clientVersion': '21.02.35',
-                'userAgent': 'com.google.android.youtube/21.02.35 (Linux; U; Android 11) gzip',
-                'osName': 'Android',
-                'osVersion': '11',
-            },
-        },
-        'INNERTUBE_CONTEXT_CLIENT_NAME': 3,
-        'REQUIRE_JS_PLAYER': False,
-    },
-    # YouTube Kids videos aren't returned on this client for some reason
+    # "Made for kids" videos aren't available with this client
+    # Using a clientVersion>1.65 may return SABR streams only
     'android_vr': {
         'INNERTUBE_CONTEXT': {
             'client': {
                 'clientName': 'ANDROID_VR',
-                'clientVersion': '1.71.26',
+                'clientVersion': '1.65.10',
                 'deviceMake': 'Oculus',
                 'deviceModel': 'Quest 3',
                 'androidSdkVersion': 32,
-                'userAgent': 'com.google.android.apps.youtube.vr.oculus/1.71.26 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip',
+                'userAgent': 'com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip',
                 'osName': 'Android',
                 'osVersion': '12L',
             },
@@ -323,13 +308,12 @@ INNERTUBE_CLIENTS = {
             'client': {
                 'clientName': 'TVHTML5',
                 'clientVersion': '7.20260114.12.00',
-                'userAgent': 'Mozilla/5.0 (ChromiumStylePlatform) Cobalt/Version',
+                # See: https://github.com/youtube/cobalt/blob/main/cobalt/browser/user_agent/user_agent_platform_info.cc#L506
+                'userAgent': 'Mozilla/5.0 (ChromiumStylePlatform) Cobalt/25.lts.30.1034943-gold (unlike Gecko), Unknown_TV_Unknown_0/Unknown (Unknown, Unknown)',
             },
         },
         'INNERTUBE_CONTEXT_CLIENT_NAME': 7,
         'SUPPORTS_COOKIES': True,
-        # See: https://github.com/youtube/cobalt/blob/main/cobalt/browser/user_agent/user_agent_platform_info.cc#L506
-        'AUTHENTICATED_USER_AGENT': 'Mozilla/5.0 (ChromiumStylePlatform) Cobalt/25.lts.30.1034943-gold (unlike Gecko), Unknown_TV_Unknown_0/Unknown (Unknown, Unknown)',
     },
     'tv_downgraded': {
         'INNERTUBE_CONTEXT': {
@@ -340,6 +324,7 @@ INNERTUBE_CLIENTS = {
             },
         },
         'INNERTUBE_CONTEXT_CLIENT_NAME': 7,
+        'REQUIRE_AUTH': True,
         'SUPPORTS_COOKIES': True,
     },
     'tv_simply': {
@@ -365,20 +350,6 @@ INNERTUBE_CLIENTS = {
         },
         'INNERTUBE_CONTEXT_CLIENT_NAME': 75,
     },
-    # This client now requires sign-in for every video
-    # It was previously an age-gate workaround for videos that were `playable_in_embed`
-    # It may still be useful if signed into an EU account that is not age-verified
-    'tv_embedded': {
-        'INNERTUBE_CONTEXT': {
-            'client': {
-                'clientName': 'TVHTML5_SIMPLY_EMBEDDED_PLAYER',
-                'clientVersion': '2.0',
-            },
-        },
-        'INNERTUBE_CONTEXT_CLIENT_NAME': 85,
-        'REQUIRE_AUTH': True,
-        'SUPPORTS_COOKIES': True,
-    },
 }
 
 
@@ -397,7 +368,7 @@ def short_client_name(client_name):
 
 def _fix_embedded_ytcfg(ytcfg):
     ytcfg['INNERTUBE_CONTEXT'].setdefault('thirdParty', {}).update({
-        'embedUrl': 'https://www.youtube.com/',  # Can be any valid URL
+        'embedUrl': 'https://www.reddit.com/',  # Can be any valid non-YouTube URL
     })
 
 
@@ -418,7 +389,6 @@ def build_innertube_clients():
         ytcfg.setdefault('SUPPORTS_COOKIES', False)
         ytcfg.setdefault('SUPPORTS_AD_PLAYBACK_CONTEXT', False)
         ytcfg.setdefault('PLAYER_PARAMS', None)
-        ytcfg.setdefault('AUTHENTICATED_USER_AGENT', None)
         ytcfg['INNERTUBE_CONTEXT']['client'].setdefault('hl', 'en')
 
         _, base_client, variant = _split_innertube_client(client)
@@ -703,14 +673,7 @@ class YoutubeBaseInfoExtractor(InfoExtractor):
     _YT_INITIAL_PLAYER_RESPONSE_RE = r'ytInitialPlayerResponse\s*='
 
     def _get_default_ytcfg(self, client='web'):
-        ytcfg = copy.deepcopy(INNERTUBE_CLIENTS[client])
-
-        # Currently, only the tv client needs to use an alternative user-agent when logged-in
-        if ytcfg.get('AUTHENTICATED_USER_AGENT') and self.is_authenticated:
-            client_context = ytcfg.setdefault('INNERTUBE_CONTEXT', {}).setdefault('client', {})
-            client_context['userAgent'] = ytcfg['AUTHENTICATED_USER_AGENT']
-
-        return ytcfg
+        return copy.deepcopy(INNERTUBE_CLIENTS[client])
 
     def _get_innertube_host(self, client='web'):
         return INNERTUBE_CLIENTS[client]['INNERTUBE_HOST']
@@ -994,16 +957,25 @@ class YoutubeBaseInfoExtractor(InfoExtractor):
         url = {
             'mweb': 'https://m.youtube.com',
             'web': 'https://www.youtube.com',
+            'web_safari': 'https://www.youtube.com',
             'web_music': 'https://music.youtube.com',
+            'web_creator': 'https://studio.youtube.com',
             'web_embedded': f'https://www.youtube.com/embed/{video_id}?html5=1',
             'tv': 'https://www.youtube.com/tv',
         }.get(client)
         if not url:
             return {}
+
+        default_ytcfg = self._get_default_ytcfg(client)
+
+        if default_ytcfg['REQUIRE_AUTH'] and not self.is_authenticated:
+            return {}
+
         webpage = self._download_webpage_with_retries(
             url, video_id, note=f'Downloading {client.replace("_", " ").strip()} client config',
-            headers=traverse_obj(self._get_default_ytcfg(client), {
+            headers=traverse_obj(default_ytcfg, {
                 'User-Agent': ('INNERTUBE_CONTEXT', 'client', 'userAgent', {str}),
+                'Referer': ('INNERTUBE_CONTEXT', 'thirdParty', 'embedUrl', {str}),
             }))
 
         ytcfg = self.extract_ytcfg(video_id, webpage) or {}
